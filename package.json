@@ -1,0 +1,17 @@
+{
+  "name": "visual-random-prompt-workshop",
+  "version": "2.01.0",
+  "description": "A visual random prompt workshop for Forge prompt pools and batch image generation.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^31.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron"
+    ]
+  }
+}

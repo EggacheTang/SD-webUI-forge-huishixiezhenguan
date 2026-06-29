@@ -1,0 +1,14 @@
+node_modules/
+dist/
+outputs/
+work/
+
+config/app-config.json
+
+260619*.json
+!260619000.json
+
+*.log
+*.tmp
+Thumbs.db
+.DS_Store
