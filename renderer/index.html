@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>绘世光辉写真馆</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+
+<body>
+<section id="launchScreen" class="launch-screen" aria-label="Forge 启动">
+  <div class="launch-panel">
+    <h1>绘世光辉写真馆</h1>
+    <p>先启动 Forge 后台服务，API 就绪后进入详细界面。</p>
+
+    <button id="launchStartForgeButton" class="launch-primary-button" onclick="launchStartForge()">启动Forge 开始绘制</button>
+    <button id="launchOnboardingGuideButton" type="button" class="launch-secondary-button" onclick="restartOnboardingGuide()">启动向导</button>
+    <label>Forge 文件位置</label>
+    <div class="launch-root-row">
+      <input id="launchForgeRootPath" type="text" readonly placeholder="请选择 sd-forge-aki 文件夹，或包含 webui.bat 的 Forge 根目录">
+      <button id="launchChooseForgeRootButton" onclick="chooseForgeRoot()">选择位置</button>
+    </div>
+
+    <div class="launch-progress" aria-label="Forge 启动进度">
+      <div id="launchProgressBar"></div>
+    </div>
+    <div id="launchStatusText" class="launch-status-text">等待启动</div>
+  </div>
+</section>
+
+<div id="detailedApp" class="container app-hidden" data-page="market" data-market-view="browse">
+  <p class="hint">
+    先在卡片库把卡片拖进卡组，固定卡组会全部输出，随机卡组每次抽取一张。
+    选好卡组后进入输出图片页面，设置尺寸、Seed 和生成数量，然后直接生图并查看结果。
+    正向卡组进入 --prompt；负向卡组进入 --negative_prompt。
+  </p>
+
+  <div class="app-main-title">绘世光辉写真馆</div>
+  <button id="prepareGenerateSwitchButton" class="panel-switch-button prepare-generate-switch-button" type="button" onclick="switchAppPage('images')">准备生图</button>
+
+  <div class="app-layout">
+    <main class="main-area">
+      <div id="editCardPanel" class="panel edit-card-panel hidden-panel">
+        <div class="edit-card-dialog">
+          <h2>编辑提示词卡片</h2>
+
+          <div class="edit-card-form-grid">
+            <div>
+              <label>所属分类</label>
+              <select id="editCardCategory"></select>
+            </div>
+
+            <div>
+              <label>中文名称</label>
+              <input id="editCardZh" type="text" placeholder="例如：防止暴露">
+            </div>
+
+            <div class="edit-card-image-field">
+              <label>预览图像</label>
+              <div class="edit-image-row">
+                <input id="editCardImage" type="text" placeholder="例如：previews/sfw.jpg" oninput="updateEditCardPreview()">
+                <button type="button" onclick="chooseEditCardImage()">选择图片</button>
+                <button type="button" onclick="useLatestImageAsEditCardPreview()">使用最新生图</button>
+                <button id="generateEditCardPreviewButton" type="button" onclick="generateEditCardPreview()">自动生成预览图</button>
+              </div>
+            </div>
+          </div>
+
+          <label>标签</label>
+          <input id="editCardTags" type="text" placeholder="例如：角色, 构图, 常用">
+
+          <label class="edit-card-prompt-field">英文 prompts
+            <textarea id="editCardPrompt" placeholder="填写英文 SD prompt / LoRA / 负面词"></textarea>
+          </label>
+
+          <div id="editCardImagePreview" class="edit-card-image-preview">暂无预览图像</div>
+          <div id="editCardPreviewStatus" class="edit-card-preview-status"></div>
+
+          <div class="edit-card-actions-row">
+            <button type="button" onclick="saveEditedCard()">保存修改</button>
+            <button type="button" onclick="cancelEditCard()">取消编辑</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel prompt-library-panel">
+        <div class="prompt-library-title-row">
+          <h2 id="promptLibraryTitle">卡片库</h2>
+          <button id="toggleLibraryCardColumnsButton" class="subtle-title-button" type="button" onclick="toggleLibraryCardColumns()">3列</button>
+          <button id="toggleNsfwCardsButton" class="subtle-title-button" type="button" onclick="toggleNsfwCardVisibility()">全部</button>
+        </div>
+
+        <div class="market-actions">
+          <button type="button" onclick="chooseBackgroundImage('launch')">启动背景</button>
+          <button type="button" onclick="chooseBackgroundImage('app')">主界面背景</button>
+          <button type="button" onclick="saveCurrentAsDefaultSettings()">设置为默认</button>
+          <button type="button" onclick="restartOnboardingGuide()">启动向导</button>
+          <button type="button" onclick="exportFullBackup()">导出</button>
+          <button type="button" onclick="document.getElementById('backupImportInput').click()">导入</button>
+          <input id="backupImportInput" class="hidden-file-input" type="file" accept=".json,application/json" onchange="importSettingsFile(event)">
+          <button id="openMarketEditorButton" class="hidden-file-input" type="button" onclick="switchMarketView('edit')">编辑卡片库</button>
+          <button id="closeMarketEditorButton" class="hidden-file-input" type="button" onclick="switchMarketView('browse')">回到卡片库</button>
+        </div>
+
+        <div id="libraryBody" class="library-body">
+          <div id="categoryGroupTabs" class="category-tabs category-group-tabs" aria-label="卡片大类"></div>
+          <div id="categoryTabs" class="category-tabs" aria-label="卡片分类"></div>
+
+          <div id="activeCategoryToolbar" class="active-category-toolbar edit-only-action">
+            <div>
+              <label>当前分类名称</label>
+              <input id="activeCategoryNameInput" type="text" placeholder="分类名称">
+            </div>
+            <button type="button" onclick="addCardToActiveCategory()">+ 卡片</button>
+            <button id="pasteLibraryCardButton" type="button" onclick="pasteLibraryCardToActiveCategory()" disabled>粘贴</button>
+            <button type="button" onclick="openTextCardGenerator()">从文本导入</button>
+            <button type="button" onclick="deleteActiveCategory()">删除</button>
+            <button id="generateActiveCategoryPreviewsButton" type="button" onclick="generateActiveCategoryPreviews()">生成预览图</button>
+            <button id="openCategoryBatchButton" type="button" onclick="openActiveCategoryBatchDialog()">索引</button>
+          </div>
+
+          <div id="libraryContainer"></div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="sidebar">
+      <div class="panel forge-panel">
+        <h2>日志</h2>
+
+        <div class="log-action-row">
+          <button type="button" onclick="openForgeWebUi()">打开 WebUI</button>
+          <button type="button" onclick="reloadForge()">重载 Forge</button>
+        </div>
+        <div id="forgeStatus" class="forge-status status-unknown">未检查</div>
+        <textarea id="forgeLogOutput" class="forge-log-output" readonly></textarea>
+      </div>
+
+      <div class="panel output-pool-panel">
+        <div class="panel-title-row">
+          <h2>卡组</h2>
+          <button id="openPoolPresetButton" type="button" onclick="openPoolPresetPage()">卡组预设</button>
+        </div>
+
+        <div class="output-pool-edit-area">
+          <div class="output-pool-action-row">
+            <button onclick="addOutputPool()">新增卡组</button>
+            <button onclick="clearAllOutputPools()">清空卡组内容</button>
+            <button onclick="autoSortOutputPools()">自动排序</button>
+          </div>
+          <div id="outputPoolsContainer"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>生图参数</h2>
+
+        <div class="grid forge-parameter-grid">
+          <div>
+            <label>宽度</label>
+            <input id="forgeWidth" type="number" value="1024" min="32" max="2048" step="32">
+          </div>
+
+          <div>
+            <label>高度</label>
+            <input id="forgeHeight" type="number" value="1536" min="32" max="2048" step="32">
+          </div>
+
+          <div>
+            <label>Seed</label>
+            <input id="forgeSeed" type="number" value="-1" min="-1" max="4294967295">
+          </div>
+
+          <div>
+            <label>生成数量</label>
+            <input id="taskCount" type="number" value="1" min="1" max="8">
+          </div>
+
+          <label class="toggle-row hires-toggle-row">
+            <input id="forgeHiresFix" type="checkbox">
+            <span>高清修复</span>
+          </label>
+
+          <label class="toggle-row adetailer-toggle-row">
+            <input id="forgeADetailer" type="checkbox">
+            <span>脸手修复</span>
+          </label>
+        </div>
+
+        <div class="generate-action-row">
+          <button id="generateForgeImageButton" class="primary-generate-button" onclick="generateForgeImage()">直接生图</button>
+          <button id="customForgeImageButton" class="primary-generate-button secondary-generate-button" onclick="openCustomForgePromptDialog()">自定义生图</button>
+          <button id="stopForgeImageButton" class="stop-generate-button" onclick="stopForgeGeneration()" disabled>停止任务</button>
+          <button id="pauseForgeImageButton" onclick="pauseForgeGeneration()" disabled>暂停</button>
+          <button id="resumeForgeImageButton" onclick="resumeForgeGeneration()" disabled>继续</button>
+          <button id="skipForgeImageButton" onclick="skipCurrentForgeGeneration()" disabled>跳过当前</button>
+          <button onclick="copyTaskCommands()">复制任务</button>
+        </div>
+        <div id="forgeGenerateStatus" class="small-hint">Forge API 就绪后，可直接使用当前 Prompt 生图。</div>
+        <div class="forge-defaults-panel">
+          <div class="forge-defaults-title">
+            <span>Forge 默认参数</span>
+            <button type="button" onclick="refreshForgeDefaults()">刷新</button>
+          </div>
+          <div id="forgeDefaultsInfo" class="forge-defaults-info">未读取</div>
+        </div>
+      </div>
+
+      <div class="panel generated-result-panel">
+        <h2>生成结果</h2>
+        <div class="result-panel-actions">
+          <button class="clear-result-button" type="button" onclick="openTodayOutputFolder()">今日文件夹</button>
+          <button class="clear-result-button" type="button" onclick="clearForgeImageResults()">清空结果</button>
+          <button id="returnMarketButton" class="panel-switch-button" type="button" onclick="switchAppPage('market')">返回卡片库</button>
+        </div>
+        <div id="forgeImageGallery" class="forge-image-gallery">
+          <div class="forge-empty-result">暂无图片</div>
+        </div>
+        <div class="generation-history-panel">
+          <div class="generation-history-title">
+            <span>生成历史</span>
+            <button type="button" onclick="clearGenerationHistory()">清空历史</button>
+          </div>
+          <div id="generationHistoryList" class="generation-history-list"></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div id="imageViewerOverlay" class="image-viewer-overlay hidden" aria-hidden="true">
+  <div class="image-viewer-toolbar">
+    <span id="imageViewerTitle">生成图片</span>
+    <button id="imageViewerPreviousButton" type="button">上一张</button>
+    <button id="imageViewerNextButton" type="button">下一张</button>
+    <button id="imageViewerReproduceButton" type="button">复制参数</button>
+    <button id="imageViewerFolderButton" type="button">打开所在文件夹</button>
+    <button id="imageViewerResetButton" type="button">重置视图</button>
+    <button id="imageViewerCloseButton" type="button">关闭</button>
+  </div>
+  <div id="imageViewerViewport" class="image-viewer-viewport">
+    <img id="imageViewerImage" alt="生成图片预览">
+  </div>
+  <div id="imageViewerDetails" class="image-viewer-details"></div>
+</div>
+
+<div id="onboardingGuide" class="onboarding-guide hidden" aria-live="polite">
+  <div id="onboardingGuideArrow" class="onboarding-guide-arrow"></div>
+  <div class="onboarding-guide-card">
+    <div class="onboarding-guide-top">
+      <div>
+        <div id="onboardingGuideStep" class="onboarding-guide-step">启动向导</div>
+        <h2 id="onboardingGuideTitle">绘世启动向导</h2>
+      </div>
+      <button id="onboardingGuideClose" class="onboarding-guide-close" type="button" aria-label="关闭启动向导">×</button>
+    </div>
+    <p id="onboardingGuideBody" class="onboarding-guide-body"></p>
+    <ul id="onboardingGuideList" class="onboarding-guide-list"></ul>
+    <div class="onboarding-guide-progress">
+      <div id="onboardingGuideProgressBar"></div>
+    </div>
+    <div class="onboarding-guide-actions">
+      <button id="onboardingGuideBack" type="button">上一步</button>
+      <button id="onboardingGuideSecondary" type="button"></button>
+      <button id="onboardingGuidePrimary" class="confirm-dialog-neutral" type="button"></button>
+    </div>
+  </div>
+</div>
+
+<div id="confirmDialog" class="confirm-dialog hidden" aria-hidden="true">
+  <div class="confirm-dialog-box" role="dialog" aria-modal="true" aria-labelledby="confirmDialogMessage">
+    <div id="confirmDialogMessage" class="confirm-dialog-message"></div>
+    <input id="confirmDialogInput" class="confirm-dialog-input" type="text">
+    <label id="confirmDialogCheckboxRow" class="confirm-dialog-checkbox-row hidden">
+      <input id="confirmDialogCheckbox" type="checkbox">
+      <span id="confirmDialogCheckboxLabel"></span>
+    </label>
+    <div class="confirm-dialog-actions">
+      <button id="confirmDialogCancel" type="button">取消</button>
+      <button id="confirmDialogOk" class="confirm-dialog-primary" type="button">确定</button>
+    </div>
+  </div>
+</div>
+
+<div id="textCardDialog" class="confirm-dialog hidden" aria-hidden="true">
+  <div class="text-card-dialog-box" role="dialog" aria-modal="true" aria-labelledby="textCardDialogTitle">
+    <h2 id="textCardDialogTitle">从文本导入卡片</h2>
+    <div class="small-hint">括号“（）”或“()”内的整段会生成一张卡片；括号外仍按换行、逗号、顿号或分号逐个生成。也支持“中文名 | english prompt”。</div>
+    <textarea id="textCardInput" class="text-card-input" placeholder="猫耳少女，白发，（red hair, blue eyes）&#10;cyberpunk city, neon lights, (rainy street, reflections)"></textarea>
+    <div class="confirm-dialog-actions">
+      <button id="textCardDialogCancel" type="button">取消</button>
+      <button id="textCardDialogCreate" class="confirm-dialog-neutral" type="button">生成卡片</button>
+    </div>
+  </div>
+</div>
+
+<div id="categoryBatchDialog" class="confirm-dialog hidden" aria-hidden="true">
+  <div class="category-batch-dialog-box" role="dialog" aria-modal="true" aria-labelledby="categoryBatchDialogTitle">
+    <div class="category-batch-title-row">
+      <div>
+        <h2 id="categoryBatchDialogTitle">索引分类卡片</h2>
+        <div id="categoryBatchSummary" class="small-hint"></div>
+      </div>
+      <div class="category-batch-title-actions">
+        <button id="categoryBatchSortButton" type="button">自动排序</button>
+        <button id="categoryBatchDialogClose" type="button">关闭</button>
+      </div>
+    </div>
+    <div id="categoryBatchContent" class="category-batch-content"></div>
+  </div>
+</div>
+
+<div id="poolPresetDialog" class="confirm-dialog hidden" aria-hidden="true">
+  <div class="pool-preset-dialog-box" role="dialog" aria-modal="true" aria-labelledby="poolPresetDialogTitle">
+    <div class="pool-preset-title-row">
+      <div>
+        <h2 id="poolPresetDialogTitle">卡组预设</h2>
+        <div id="poolPresetSummary" class="small-hint"></div>
+      </div>
+      <button id="poolPresetDialogClose" type="button">关闭</button>
+    </div>
+    <div class="pool-preset-layout">
+      <aside class="pool-preset-sidebar">
+        <div class="pool-preset-section-title">预设分类</div>
+        <div id="poolPresetCategoryList" class="pool-preset-category-list"></div>
+        <div class="pool-preset-sidebar-actions">
+          <button id="poolPresetAddCategoryButton" type="button">新增</button>
+          <button id="poolPresetRenameCategoryButton" type="button">重命名</button>
+          <button id="poolPresetDeleteCategoryButton" type="button">删除</button>
+        </div>
+      </aside>
+      <main class="pool-preset-main">
+        <div class="pool-preset-toolbar">
+          <button id="poolPresetSaveButton" type="button">新增</button>
+          <button id="poolPresetLoadButton" type="button">读取</button>
+          <button id="poolPresetOverwriteButton" type="button">覆盖</button>
+          <button id="poolPresetRenameButton" type="button">重命名</button>
+          <button id="poolPresetDeleteButton" type="button">删除</button>
+        </div>
+        <div id="poolPresetList" class="pool-preset-list"></div>
+      </main>
+    </div>
+  </div>
+</div>
+
+<div id="customPromptDialog" class="confirm-dialog hidden" aria-hidden="true">
+  <div class="custom-prompt-dialog-box" role="dialog" aria-modal="true" aria-labelledby="customPromptDialogTitle">
+    <h2 id="customPromptDialogTitle">自定义生图</h2>
+    <div class="small-hint">这里是发送到 Forge 的完整任务命令，可直接复制到 WebUI 脚本文本命令。每行一个任务，确认后会按编辑后的命令生图。</div>
+    <label>任务命令</label>
+    <textarea id="customTaskCommandInput" class="custom-prompt-input custom-task-command-input"></textarea>
+    <div class="confirm-dialog-actions">
+      <button id="customPromptDialogCancel" type="button">取消</button>
+      <button id="customPromptDialogCopy" type="button">复制命令</button>
+      <button id="customPromptDialogGenerate" class="confirm-dialog-neutral" type="button">确认并生图</button>
+    </div>
+  </div>
+</div>
+
+<script src="./app.js"></script>
+</body>
+</html>
